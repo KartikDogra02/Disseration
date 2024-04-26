@@ -22,12 +22,13 @@ class OpponentThread(threading.Thread):
 
 def train_agents(episodes):
     agents = {}
-
+    # Initialize an agent for each type of white piece
     for piece_type in [chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN, chess.KING]:
         agents[piece_type] = ModelBasedRLAgent(piece_type)
-    other_agents = list(agents.values())  # Define other_agents list
 
+    other_agents = list(agents.values())  # Define other_agents list
     opponent = GreedyOpponent()  # Initialize the opponent agent
+
 
     white_wins = 0
     black_wins = 0
@@ -41,22 +42,20 @@ def train_agents(episodes):
 
         while not board.is_game_over():
             current_color = board.turn
-            piece_type = choose_piece_type(board)
-            agent = agents[piece_type]
-
-            # If it's the opponent's turn, choose action using the opponent agent
-            if current_color == chess.BLACK:
-                opponent_thread = OpponentThread(opponent, board)
-                opponent_thread.start()
-                opponent_thread.join(timeout=5)  # Wait for opponent move with a timeout
-                if opponent_thread.move:
-                    action = opponent_thread.move.uci()  # Convert Move object to UCI string
-                else:
-                    action = random.choice([move.uci() for move in board.legal_moves])
-            else:
+            if current_color == chess.WHITE:
+                # Choose the piece type and corresponding agent based on the board state
+                piece_type = choose_piece_type(board)
+                agent = agents[piece_type]
                 action = agent.choose_action(board)
-
-            board.push_uci(action)
+                board.push_uci(action)
+                reward = evaluate_reward(board)
+                agent.train(board, reward, other_agents)
+            else:
+                action = opponent.choose_action(board)
+                board.push_uci(action)
+                # Optionally evaluate and update for learning purposes, if black also learns
+                reward = evaluate_reward(board)
+                opponent.train(board, reward, other_agents)  # Assuming opponent can also train
 
             # Evaluate the reward and train the agent
             reward = evaluate_reward(board)
@@ -74,7 +73,8 @@ def train_agents(episodes):
         else:
             draws += 1
             
-        print(f"Episode {episode + 1} complete Game result: {game_result}")
+        print("Episode {} complete Game result: {}".format(episode + 1, game_result))
+
 
         # Communication between agents after each episode
         for agent in agents.values():
@@ -118,38 +118,43 @@ def choose_piece_type(board):
     """
     Choose the piece type to move based on a combination of evaluation and strategy.
     """
+    if board.is_endgame():
+        # In the endgame, prioritize king and queens for mobility and checkmate threats
+        return chess.KING if board.piece_at(board.king(chess.WHITE)) else chess.QUEEN
+
     # Define piece values for evaluation
-    piece_values = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5, chess.QUEEN: 9, chess.KING: 100}
+    piece_values = {
+        chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3,
+        chess.ROOK: 5, chess.QUEEN: 9, chess.KING: 0  # King's value can be context-specific
+    }
 
-    # Strategy-based piece selection
-    if len(board.move_stack) < 10:
-        # In the opening phase, prioritize control with pawns and centralization of knights
-        if board.turn == chess.WHITE:
-            return chess.PAWN
-        else:
-            return random.choice([chess.KNIGHT, chess.BISHOP])
-    else:
-        # Initialize piece mobility and safety dictionaries
-        piece_mobility = {piece_type: 0 for piece_type in piece_values.keys()}
-        piece_safety = {piece_type: 0 for piece_type in piece_values.keys()}
+    # Calculate mobility and position value for each piece
+    piece_scores = {piece_type: 0 for piece_type in piece_values.keys()}
+    for move in board.legal_moves:
+        moved_piece = board.piece_at(move.from_square).piece_type
+        piece_scores[moved_piece] += 1  # Increase score for mobility
 
-        # Calculate piece mobility and safety
-        for move in board.legal_moves:
-            piece = board.piece_at(move.from_square)
-            if piece and piece.color == chess.WHITE:
-                piece_mobility[piece.piece_type] += 1
-                if board.is_attacked_by(chess.BLACK, move.to_square):
-                    piece_safety[piece.piece_type] -= 1
-                else:
-                    piece_safety[piece.piece_type] += 1
+        # Add positional bonuses
+        if moved_piece == chess.KNIGHT and move.to_square in [chess.D4, chess.D5, chess.E4, chess.E5]:
+            piece_scores[moved_piece] += 2  # Central position bonus for knights
 
-        # Calculate the weighted score for each piece type
-        weighted_scores = {piece_type: piece_values[piece_type] + piece_mobility[piece_type] + piece_safety[piece_type] for piece_type in piece_values.keys()}
+    # Adjust scores based on tactical situations
+    # Example: Check for pins or forks that can be exploited or need to be prevented
+    for move in board.legal_moves:
+        if board.gives_check(move):
+            piece_scores[board.piece_at(move.from_square).piece_type] += 5  # Bonus for checking moves
 
-        # Decide based on the piece type with the highest weighted score
-        best_piece = max(weighted_scores, key=weighted_scores.get)
+    # Decide based on the piece type with the highest score
+    best_piece = max(piece_scores, key=piece_scores.get)
 
-        return best_piece
+    return best_piece
+
+def is_endgame(board):
+    """
+    Simple heuristic to determine if the game is in the endgame phase.
+    """
+    total_pieces = len(board.piece_map())
+    return total_pieces <= 12  # Consider it endgame if there are 12 or fewer pieces on the board
 
 
 
