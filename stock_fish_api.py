@@ -1,7 +1,7 @@
 import requests
 
 class StockFishOnlineOpponent:
-    def __init__(self, depth=1):
+    def __init__(self, depth=12):
         self.base_url = "https://stockfish.online/api/s/v2.php"
         self.depth = depth
 
