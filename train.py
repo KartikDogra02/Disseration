@@ -23,8 +23,9 @@ class OpponentThread(threading.Thread):
 def train_agents(episodes):
     agents = {}
     # Initialize an agent for each type of white piece
+    board=chess.Board()
     for piece_type in [chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN, chess.KING]:
-        agents[piece_type] = ModelBasedRLAgent(piece_type)
+        agents[piece_type] = ModelBasedRLAgent(piece_type, board)
 
     other_agents = list(agents.values())  # Define other_agents list
     opponent = GreedyOpponent()  # Initialize the opponent agent
@@ -43,24 +44,19 @@ def train_agents(episodes):
         while not board.is_game_over():
             current_color = board.turn
             if current_color == chess.WHITE:
-                # Choose the piece type and corresponding agent based on the board state
                 piece_type = choose_piece_type(board)
                 agent = agents[piece_type]
                 action = agent.choose_action(board)
+                if isinstance(action, chess.Move):  # Check if the action is a Move object
+                    action = action.uci()  # Convert Move to UCI string
                 board.push_uci(action)
                 reward = evaluate_reward(board)
                 agent.train(board, reward, other_agents)
             else:
                 action = opponent.choose_action(board)
+                if isinstance(action, chess.Move):  # Similar check for black moves
+                    action = action.uci()
                 board.push_uci(action)
-                # Optionally evaluate and update for learning purposes, if black also learns
-                reward = evaluate_reward(board)
-                opponent.train(board, reward, other_agents)  # Assuming opponent can also train
-
-            # Evaluate the reward and train the agent
-            reward = evaluate_reward(board)
-            agent.train(board, reward, other_agents)
-
             total_reward += reward
 
         episode_rewards.append(total_reward)  # Store total reward for the episode
@@ -118,7 +114,7 @@ def choose_piece_type(board):
     """
     Choose the piece type to move based on a combination of evaluation and strategy.
     """
-    if board.is_endgame():
+    if is_endgame(board):
         # In the endgame, prioritize king and queens for mobility and checkmate threats
         return chess.KING if board.piece_at(board.king(chess.WHITE)) else chess.QUEEN
 
@@ -155,10 +151,6 @@ def is_endgame(board):
     """
     total_pieces = len(board.piece_map())
     return total_pieces <= 12  # Consider it endgame if there are 12 or fewer pieces on the board
-
-
-
-
 
 def get_game_result(board):
     if board.is_checkmate():
@@ -203,5 +195,5 @@ def play_against_agents(agents):
 
 
 if __name__ == "__main__":
-    trained_agents=train_agents(episodes=10)
+    trained_agents=train_agents(episodes=1000)
     play_against_agents(trained_agents)
