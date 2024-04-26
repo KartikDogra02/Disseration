@@ -1,0 +1,32 @@
+# Chess Reinforcement Learning Project
+
+This repository contains several modules that together form a chess reinforcement learning environment, leveraging various strategies and APIs to simulate and learn from chess games.
+
+## Modules
+
+### `opponent_agent.py`
+
+- **Description**: This module defines an agent that acts as the opponent in chess games. It uses predefined strategies or external APIs to make decisions.
+
+### `rl_agent.py`
+
+- **Description**: Implements the reinforcement learning agent. This agent learns from interactions with the environment and improves its decision-making capabilities over time.
+
+### `state_representation.py`
+
+- **Description**: Provides functions to represent the chess game state in a format suitable for processing by machine learning models.
+
+### `stock_fish_api.py`
+
+- **Description**: Interfaces with the Stockfish chess engine API, enabling the reinforcement learning agent to query optimal moves under certain game states.
+
+### `train.py`
+
+- **Description**: Orchestrates the training process of the reinforcement learning agent by setting up game simulations, updating the agent’s state, and adjusting its learning parameters.
+
+## Installation
+
+1. Clone the repository:
+
+   ```bash
+   git clone [repository-url]
