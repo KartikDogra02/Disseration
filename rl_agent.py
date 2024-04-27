@@ -5,10 +5,9 @@ import chess
 from state_representation import CustomStateRepresentation
 from collections import deque
 import random
-from piece_stratergy import choose_strategy
 
 class ModelBasedRLAgent:
-    def __init__(self, piece_type, board, learning_rate=0.1, discount_factor=0.9, exploration_rate=0.1, communication_frequency=10, memory_capacity=1000):
+    def __init__(self, piece_type, learning_rate=0.1, discount_factor=0.9, exploration_rate=0.1, communication_frequency=10, memory_capacity=1000):
         self.piece_type = piece_type
         self.state_representation = CustomStateRepresentation()
         self.input_shape = (8, 8, 16)  # Assuming your state representation is a 8x8x16 tensor
@@ -23,7 +22,6 @@ class ModelBasedRLAgent:
         self.episode_counter = 0
         self.last_state = None
         self.last_action = None
-        self.strategy = choose_strategy(board, piece_type)
 
     def build_model(self):
         model = Sequential()
@@ -46,18 +44,17 @@ class ModelBasedRLAgent:
         if np.random.rand() < self.exploration_rate:
             # Explore: choose a random legal move
             legal_moves = [move.uci() for move in board.legal_moves]
-            return np.random.choice(legal_moves)
+            action = np.random.choice(legal_moves)
         else:
-            # Exploit: choose action with highest combined Q-value and strategic score
+            # Exploit: choose action with highest Q-value from the neural network
             q_values = self.model.predict(np.array([state]))[0]
-            legal_moves = list(board.legal_moves)
-            move_scores = {}
-            for move in legal_moves:
-                strategic_score = self.strategy.evaluate_move(move)
-                move_scores[move] = q_values[move.from_square] + strategic_score
-
-            best_move = max(move_scores, key=move_scores.get)
-            return best_move.uci()
+            legal_moves = [move.uci() for move in board.legal_moves]
+            q_values_legal = {chess.Move.from_uci(move): q_values[chess.Move.from_uci(move).from_square] for move in legal_moves}
+            action = max(q_values_legal, key=q_values_legal.get).uci()
+        
+        self.last_state = state
+        self.last_action = action
+        return action
 
     def update_memory(self, experiences):
         for experience in experiences:
